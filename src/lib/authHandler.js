@@ -1,9 +1,10 @@
 // src/lib/authHandler.js
 import { supabase } from './supabaseClient'
 
+// Simplified auth handler - main auth logic is now in AuthContext
 export async function processOAuthRedirectAndSession() {
   try {
-    // Handle OAuth redirect
+    // Handle OAuth redirect (for Google OAuth only)
     const { data, error } = await supabase.auth.getSession();
     
     if (error) {
@@ -13,34 +14,12 @@ export async function processOAuthRedirectAndSession() {
     
     if (data.session) {
       console.log('Session found:', data.session);
-      // Session is automatically handled by the auth state change listener
+      // Session is automatically handled by the auth state change listener in AuthContext
     }
   } catch (err) {
     console.error('Auth handler error:', err);
   }
 
-  // The auth state change listener in AuthContext will handle the rest
-  supabase.auth.onAuthStateChange(async (event, session) => {
-    console.log('Auth event in handler:', event, session);
-
-    if (session?.user) {
-      try {
-        await supabase.from('users').upsert({
-          id: session.user.id,
-          email: session.user.email,
-          created_at: new Date().toISOString()
-        }, { 
-          onConflict: 'id',
-          ignoreDuplicates: false 
-        });
-      } catch (e) {
-        console.error('Failed to upsert user:', e);
-      }
-      
-      // Dispatch custom event for any components that need to know
-      window.dispatchEvent(new CustomEvent('inflow:auth-changed', { detail: { session } }));
-    }
-  });
-
+  // Return session for any components that need it
   return supabase.auth.getSession();
 }
