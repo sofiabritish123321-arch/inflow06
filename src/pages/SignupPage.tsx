@@ -34,16 +34,10 @@ export default function SignupPage() {
       if (!agreeToPrivacy) {
         throw new Error('You must agree to the Privacy Policy to create an account');
       }
-      
-      // Validate password strength
-      if (formData.password.length < 6) {
-        throw new Error('Password must be at least 6 characters long');
-      }
-      
       await signUp(formData.email, formData.password, formData.username);
       
-      // For email signup, show success message and redirect to login
-      alert('Account created successfully! Please check your email for a verification link, then log in with your credentials.');
+      // For email signup, show success message and redirect
+      alert('Account created successfully! You can now log in with your credentials.');
       window.location.href = '/login';
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Signup failed';

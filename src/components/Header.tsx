@@ -28,8 +28,7 @@ export default function Header({ currentPage = 'home', onNavigate }: HeaderProps
 
   const handleAuthAction = () => {
     if (user) {
-      // Don't catch errors here - let signOut handle them
-      signOut();
+      signOut().catch(console.error);
     } else {
       window.location.href = '/login';
     }

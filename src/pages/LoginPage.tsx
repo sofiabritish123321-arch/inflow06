@@ -28,8 +28,7 @@ export default function LoginPage() {
 
     try {
       await signIn(formData.email, formData.password);
-      // Don't redirect immediately - let auth state change handle it
-      // This prevents race conditions
+      window.location.href = '/';
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Login failed';
       console.error('Login error:', err);
@@ -38,16 +37,6 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
-
-  // Handle redirect after successful authentication
-  useEffect(() => {
-    if (user && !loading) {
-      // Wait for auth state to be fully resolved before redirecting
-      setTimeout(() => {
-        window.location.href = '/';
-      }, 100);
-    }
-  }, [user, loading]);
 
   const handleGoogleSignIn = async () => {
     setError('');
