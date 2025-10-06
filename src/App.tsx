@@ -18,17 +18,38 @@ function App() {
   const [currentPage, setCurrentPage] = useState('home');
 
   useEffect(() => {
+    // Handle URL-based routing
+    const path = window.location.pathname;
+    if (path === '/login' || path === '/signup') {
+      // These are handled separately below
+      return;
+    }
+    
+    // Handle hash-based navigation for other pages
+    const hash = window.location.hash.replace('#', '');
+    if (hash && hash !== currentPage) {
+      setCurrentPage(hash);
+    }
+    
     const handleNavigate = (event: CustomEvent) => {
       setCurrentPage(event.detail);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
+    const handlePopState = () => {
+      const hash = window.location.hash.replace('#', '') || 'home';
+      setCurrentPage(hash);
+    };
+
     window.addEventListener('navigate', handleNavigate as EventListener);
+    window.addEventListener('popstate', handlePopState);
+    
     return () => window.removeEventListener('navigate', handleNavigate as EventListener);
   }, []);
 
   const handleNavigation = (page: string) => {
     setCurrentPage(page);
+    window.location.hash = page === 'home' ? '' : page;
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -55,6 +76,7 @@ function App() {
       </AuthProvider>
     );
   }
+  
   const renderPage = () => {
     switch (currentPage) {
       case 'features':

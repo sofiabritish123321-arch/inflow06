@@ -39,8 +39,8 @@ export default function LoginPage() {
   };
 
   const handleGoogleSignIn = async () => {
-    setLoading(true);
     setError('');
+    setLoading(true);
     try {
       await signInWithGoogle();
       // OAuth will redirect, so no need to manually redirect
@@ -48,6 +48,7 @@ export default function LoginPage() {
       const errorMessage = err instanceof Error ? err.message : 'Google sign-in failed';
       console.error('Google sign-in error:', err);
       setError(errorMessage);
+    } finally {
       setLoading(false);
     }
   };

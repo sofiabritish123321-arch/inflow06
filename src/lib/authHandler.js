@@ -2,37 +2,45 @@
 import { supabase } from './supabaseClient'
 
 export async function processOAuthRedirectAndSession() {
-  // Attempt to process OAuth redirect (SDK supports getSessionFromUrl in some versions)
   try {
-    if (typeof supabase.auth.getSessionFromUrl === 'function') {
-      // v2 SDK might have this
-      await supabase.auth.getSessionFromUrl({ storeSession: true })
+    // Handle OAuth redirect
+    const { data, error } = await supabase.auth.getSession();
+    
+    if (error) {
+      console.error('Session error:', error);
+      return;
+    }
+    
+    if (data.session) {
+      console.log('Session found:', data.session);
+      // Session is automatically handled by the auth state change listener
     }
   } catch (err) {
-    // ignore if not supported
-    console.debug('getSessionFromUrl not available or failed', err)
+    console.error('Auth handler error:', err);
   }
 
-  // Register onAuthStateChange to handle session changes
+  // The auth state change listener in AuthContext will handle the rest
   supabase.auth.onAuthStateChange(async (event, session) => {
-    console.debug('Auth event', event, session)
+    console.log('Auth event in handler:', event, session);
 
     if (session?.user) {
-      // Upsert the user in users table (non-blocking)
       try {
         await supabase.from('users').upsert({
           id: session.user.id,
           email: session.user.email,
-          updated_at: new Date().toISOString()
-        }, { returning: 'minimal' })
+          created_at: new Date().toISOString()
+        }, { 
+          onConflict: 'id',
+          ignoreDuplicates: false 
+        });
       } catch (e) {
-        console.error('Failed to upsert user', e)
+        console.error('Failed to upsert user:', e);
       }
-      // Optionally redirect to dashboard or update UI via window.dispatchEvent
-      window.dispatchEvent(new CustomEvent('inflow:auth-changed', { detail: { session } }))
+      
+      // Dispatch custom event for any components that need to know
+      window.dispatchEvent(new CustomEvent('inflow:auth-changed', { detail: { session } }));
     }
-  })
+  });
 
-  // Also expose a helper to get current session
-  return supabase.auth.getSession()
+  return supabase.auth.getSession();
 }

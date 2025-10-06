@@ -35,10 +35,10 @@ export default function SignupPage() {
         throw new Error('You must agree to the Privacy Policy to create an account');
       }
       await signUp(formData.email, formData.password, formData.username);
-      // Show success message instead of immediate redirect
-      setError('');
-      alert('Account created successfully! Please check your email for verification if required.');
-      window.location.href = '/';
+      
+      // For email signup, show success message and redirect
+      alert('Account created successfully! You can now log in with your credentials.');
+      window.location.href = '/login';
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Signup failed';
       console.error('Signup error:', err);
@@ -49,8 +49,8 @@ export default function SignupPage() {
   };
 
   const handleGoogleSignIn = async () => {
-    setLoading(true);
     setError('');
+    setLoading(true);
     try {
       await signInWithGoogle();
       // OAuth will redirect, so no need to manually redirect
@@ -58,6 +58,7 @@ export default function SignupPage() {
       const errorMessage = err instanceof Error ? err.message : 'Google sign-in failed';
       console.error('Google sign-in error:', err);
       setError(errorMessage);
+    } finally {
       setLoading(false);
     }
   };

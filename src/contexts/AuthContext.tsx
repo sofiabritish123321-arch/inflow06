@@ -23,13 +23,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      async (event, session) => {
+        console.log('Auth state change:', event, session);
+        
         if (session?.user) {
           setUser({
             id: session.user.id,
             email: session.user.email || '',
             username: session.user.user_metadata?.username,
           });
+          
+          // Upsert user to database
+          try {
+            await supabase.from('users').upsert({
+              id: session.user.id,
+              email: session.user.email,
+              created_at: new Date().toISOString()
+            }, { 
+              onConflict: 'id',
+              ignoreDuplicates: false 
+            });
+          } catch (error) {
+            console.error('Error upserting user:', error);
+          }
         } else {
           setUser(null);
         }
@@ -48,6 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         data: {
           username,
         },
+        emailRedirectTo: `${window.location.origin}/`,
       },
     });
     if (error) {
@@ -70,10 +87,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    try {
+      // Clear any local storage or session storage
+      localStorage.clear();
+      sessionStorage.clear();
+      
+      // Sign out from Supabase
     const { error } = await supabase.auth.signOut();
     if (error) {
       console.error('Signout error:', error);
       throw new Error(error.message || 'Signout failed');
+    }
+      
+      // Clear user state immediately
+      setUser(null);
+      
+      // Force redirect to home page and replace history
+      window.location.replace('/');
+    } catch (error) {
+      console.error('Signout error:', error);
+      // Even if there's an error, clear the user state and redirect
+      setUser(null);
+      window.location.replace('/');
     }
   };
 
@@ -81,7 +116,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.origin,
+        redirectTo: `${window.location.origin}/`,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'select_account',
+        },
       },
     });
     if (error) {
