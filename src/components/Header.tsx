@@ -28,8 +28,12 @@ export default function Header({ currentPage = 'home', onNavigate }: HeaderProps
 
   const handleAuthAction = () => {
     if (user) {
-      // Call signOut without awaiting to ensure immediate UI response
-      signOut();
+      // Call signOut and handle any errors
+      signOut().catch(error => {
+        console.error('Sign out failed:', error);
+        // Force redirect even if sign out fails
+        window.location.replace('/');
+      });
     } else {
       window.location.href = '/login';
     }

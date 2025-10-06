@@ -1,157 +1,255 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { AuthContextType, User } from '../types/auth';
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setUser({
-          id: session.user.id,
-          email: session.user.email || '',
-          username: session.user.user_metadata?.username,
-        });
-      }
-      setLoading(false);
-    });
+    let mounted = true;
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('Auth state change:', event, session);
+    // Get initial session with proper error handling
+    const initializeAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
         
-        if (event === 'SIGNED_OUT' || !session) {
-          // Handle sign out - clear user state immediately
-          setUser(null);
-          setLoading(false);
-        } else if (session?.user) {
-          // Handle sign in - set user and upsert to database
+        if (error) {
+          console.error('Error getting initial session:', error);
+          if (mounted) {
+            setUser(null);
+            setLoading(false);
+          }
+          return;
+        }
+
+        if (session?.user && mounted) {
           setUser({
             id: session.user.id,
             email: session.user.email || '',
             username: session.user.user_metadata?.username,
           });
-          
-          // Upsert user to database (non-blocking for sign-out)
-          try {
-            await supabase.from('users').upsert({
+        }
+      } catch (error) {
+        console.error('Failed to initialize auth:', error);
+        if (mounted) {
+          setUser(null);
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    initializeAuth();
+
+    // Listen for auth changes with improved handling
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event: AuthChangeEvent, session: Session | null) => {
+        console.log('Auth state change:', event, session?.user?.id || 'no user');
+        
+        if (!mounted) return;
+
+        try {
+          if (event === 'SIGNED_OUT' || !session) {
+            // Handle sign out - immediate state update
+            console.log('User signed out, clearing state');
+            setUser(null);
+            setIsSigningOut(false);
+            setLoading(false);
+            
+            // Clear any remaining client-side data
+            try {
+              localStorage.removeItem('supabase.auth.token');
+              sessionStorage.clear();
+            } catch (e) {
+              console.warn('Error clearing storage:', e);
+            }
+            
+          } else if (session?.user && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
+            // Handle sign in - update user state
+            const newUser = {
+              id: session.user.id,
+              email: session.user.email || '',
+              username: session.user.user_metadata?.username,
+            };
+            
+            setUser(newUser);
+            setLoading(false);
+            
+            // Non-blocking database upsert (don't await)
+            supabase.from('users').upsert({
               id: session.user.id,
               email: session.user.email,
               created_at: new Date().toISOString()
             }, { 
               onConflict: 'id',
               ignoreDuplicates: false 
+            }).then(({ error }) => {
+              if (error) {
+                console.error('Error upserting user:', error);
+              }
             });
-          } catch (error) {
-            console.error('Error upserting user:', error);
-            // Don't block auth flow on database errors
           }
-          
-          setLoading(false);
+        } catch (error) {
+          console.error('Error in auth state change handler:', error);
+          if (mounted) {
+            setLoading(false);
+          }
         }
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signUp = async (email: string, password: string, username: string) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          username,
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            username,
+          },
+          emailRedirectTo: `${window.location.origin}/`,
         },
-        emailRedirectTo: `${window.location.origin}/`,
-      },
-    });
-    if (error) {
+      });
+      
+      if (error) {
+        console.error('Signup error:', error);
+        throw new Error(error.message || 'Signup failed');
+      }
+      
+      return data;
+    } catch (error) {
       console.error('Signup error:', error);
-      throw new Error(error.message || 'Signup failed');
+      throw error;
     }
-    return data;
   };
 
   const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    if (error) {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      if (error) {
+        console.error('Login error:', error);
+        throw new Error(error.message || 'Login failed');
+      }
+      
+      return data;
+    } catch (error) {
       console.error('Login error:', error);
-      throw new Error(error.message || 'Login failed');
+      throw error;
     }
-    return data;
   };
 
   const signOut = async () => {
+    if (isSigningOut) {
+      console.log('Sign out already in progress');
+      return;
+    }
+
+    console.log('Starting sign out process');
+    setIsSigningOut(true);
+
     try {
-      // 1. Trigger Supabase sign out first
+      // 1. Call Supabase sign out
       const { error } = await supabase.auth.signOut();
       
       if (error) {
         console.error('Supabase signout error:', error);
         // Continue with cleanup even if Supabase fails
+      } else {
+        console.log('Supabase signout successful');
       }
-      
-      // 2. Clear all local storage and session storage
-      localStorage.clear();
-      sessionStorage.clear();
-      
-      // 3. Clear any cookies (if any)
-      document.cookie.split(";").forEach((c) => {
-        const eqPos = c.indexOf("=");
-        const name = eqPos > -1 ? c.substr(0, eqPos) : c;
-        document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
-      });
-      
-      // 4. Set user state to null immediately
-      setUser(null);
-      
-      // 5. Redirect to landing page (always happens)
-      window.location.replace('/');
       
     } catch (error) {
       console.error('Sign out error:', error);
-      
-      // Ensure cleanup happens even on error
-      localStorage.clear();
-      sessionStorage.clear();
-      setUser(null);
-      window.location.replace('/');
+      // Continue with cleanup even on error
     }
+
+    // 2. Force clear all client-side data
+    try {
+      // Clear localStorage
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.includes('supabase') || key.includes('auth'))) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+      
+      // Clear sessionStorage
+      sessionStorage.clear();
+      
+      // Clear cookies
+      document.cookie.split(";").forEach((c) => {
+        const eqPos = c.indexOf("=");
+        const name = eqPos > -1 ? c.substr(0, eqPos).trim() : c.trim();
+        if (name.includes('supabase') || name.includes('auth')) {
+          document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${window.location.hostname}`;
+          document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+        }
+      });
+      
+    } catch (error) {
+      console.error('Error clearing client data:', error);
+    }
+
+    // 3. Force update state
+    setUser(null);
+    setIsSigningOut(false);
+    setLoading(false);
+
+    // 4. Redirect to landing page
+    console.log('Redirecting to landing page');
+    window.location.replace('/');
   };
 
   const signInWithGoogle = async () => {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/`,
-        queryParams: {
-          access_type: 'offline',
-          prompt: 'select_account',
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/`,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'select_account',
+          },
         },
-      },
-    });
-    if (error) {
-      console.error('Google OAuth error:', error);
-      throw new Error(error.message || 'Google sign-in failed');
+      });
+      setLoading(false);
+      
+      if (error) {
+        console.error('Google OAuth error:', error);
+        throw new Error(error.message || 'Google sign-in failed');
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Google sign-in error:', error);
+      throw error;
     }
-    return data;
   };
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        loading,
+        loading: loading || isSigningOut,
         signUp,
         signIn,
         signOut,
