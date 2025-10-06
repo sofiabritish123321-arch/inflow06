@@ -28,12 +28,7 @@ export default function Header({ currentPage = 'home', onNavigate }: HeaderProps
 
   const handleAuthAction = () => {
     if (user) {
-      // Call signOut and handle any errors
-      signOut().catch(error => {
-        console.error('Sign out failed:', error);
-        // Force redirect even if sign out fails
-        window.location.replace('/');
-      });
+      signOut().catch(console.error);
     } else {
       window.location.href = '/login';
     }
@@ -84,7 +79,7 @@ export default function Header({ currentPage = 'home', onNavigate }: HeaderProps
             <div className="hidden md:flex items-center space-x-3">
               {user ? (
                 <button
-                  onClick={handleAuthAction}
+                  onClick={signOut}
                   className="bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-pink-500/25"
                 >
                   Sign Out
@@ -134,7 +129,7 @@ export default function Header({ currentPage = 'home', onNavigate }: HeaderProps
                 ))}
                 {user ? (
                   <button
-                    onClick={handleAuthAction}
+                    onClick={signOut}
                     className="bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-300 w-full mt-4 shadow-lg hover:shadow-pink-500/25"
                   >
                     Sign Out
