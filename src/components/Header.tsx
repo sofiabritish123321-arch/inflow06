@@ -28,7 +28,8 @@ export default function Header({ currentPage = 'home', onNavigate }: HeaderProps
 
   const handleAuthAction = () => {
     if (user) {
-      signOut().catch(console.error);
+      // Call signOut without awaiting to ensure immediate UI response
+      signOut();
     } else {
       window.location.href = '/login';
     }
@@ -79,7 +80,7 @@ export default function Header({ currentPage = 'home', onNavigate }: HeaderProps
             <div className="hidden md:flex items-center space-x-3">
               {user ? (
                 <button
-                  onClick={signOut}
+                  onClick={handleAuthAction}
                   className="bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-pink-500/25"
                 >
                   Sign Out
@@ -129,7 +130,7 @@ export default function Header({ currentPage = 'home', onNavigate }: HeaderProps
                 ))}
                 {user ? (
                   <button
-                    onClick={signOut}
+                    onClick={handleAuthAction}
                     className="bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-300 w-full mt-4 shadow-lg hover:shadow-pink-500/25"
                   >
                     Sign Out

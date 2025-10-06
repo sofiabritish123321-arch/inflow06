@@ -26,14 +26,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       async (event, session) => {
         console.log('Auth state change:', event, session);
         
-        if (session?.user) {
+        if (event === 'SIGNED_OUT' || !session) {
+          // Handle sign out - clear user state immediately
+          setUser(null);
+          setLoading(false);
+        } else if (session?.user) {
+          // Handle sign in - set user and upsert to database
           setUser({
             id: session.user.id,
             email: session.user.email || '',
             username: session.user.user_metadata?.username,
           });
           
-          // Upsert user to database
+          // Upsert user to database (non-blocking for sign-out)
           try {
             await supabase.from('users').upsert({
               id: session.user.id,
@@ -45,11 +50,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             });
           } catch (error) {
             console.error('Error upserting user:', error);
+            // Don't block auth flow on database errors
           }
-        } else {
-          setUser(null);
+          
+          setLoading(false);
         }
-        setLoading(false);
       }
     );
 
@@ -88,25 +93,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
-      // Clear any local storage or session storage
+      // 1. Trigger Supabase sign out first
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.error('Supabase signout error:', error);
+        // Continue with cleanup even if Supabase fails
+      }
+      
+      // 2. Clear all local storage and session storage
       localStorage.clear();
       sessionStorage.clear();
       
-      // Sign out from Supabase
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      console.error('Signout error:', error);
-      throw new Error(error.message || 'Signout failed');
-    }
+      // 3. Clear any cookies (if any)
+      document.cookie.split(";").forEach((c) => {
+        const eqPos = c.indexOf("=");
+        const name = eqPos > -1 ? c.substr(0, eqPos) : c;
+        document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+      });
       
-      // Clear user state immediately
+      // 4. Set user state to null immediately
       setUser(null);
       
-      // Force redirect to home page and replace history
+      // 5. Redirect to landing page (always happens)
       window.location.replace('/');
+      
     } catch (error) {
-      console.error('Signout error:', error);
-      // Even if there's an error, clear the user state and redirect
+      console.error('Sign out error:', error);
+      
+      // Ensure cleanup happens even on error
+      localStorage.clear();
+      sessionStorage.clear();
       setUser(null);
       window.location.replace('/');
     }
